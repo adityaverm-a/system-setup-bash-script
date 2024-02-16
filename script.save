@@ -1,0 +1,5 @@
+echo "Starting your System-Setup soon!"
+sleep 1
+
+echo "RUNNING: apt update"
+sudo apt-get install apache2

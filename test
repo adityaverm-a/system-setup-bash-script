@@ -1,0 +1,82 @@
+echo "Starting the system setup soon!"
+sleep 1
+
+echo ""
+echo "Enter repositories to clone [api/droom-php-admin/droom-website] (separated by spaces): "
+read -a repos
+echo ""
+
+for r in "${repos[@]}"; do
+	echo ""
+	echo "Cloning $r"
+   	sudo git clone https://github.com/droomlabs/$r.git   /var/www/html/$r
+
+	hostname="local.$r.in"
+	if grep -q "$hostname" /etc/hosts; then
+	        echo "$hostname already exists in /etc/hosts"
+   	 else
+        	echo "127.0.0.1 $hostname" | sudo tee -a /etc/hosts > /dev/null
+       	 	echo "Added $hostname to /etc/hosts"
+    	fi
+
+	php_version=5.6
+
+	if [ $r == "droom-website" ]; then
+		php_version=7.4
+	fi
+
+	#!
+# Define the content to be added to the configuration file
+conf_content=$(cat <<EOF
+<VirtualHost *:80>
+    <Directory /var/www/html/$r/public>
+        Options -MultiViews
+        AllowOverride All
+        Require all granted
+        <IfModule mod_rewrite.c>
+            Options -MultiViews
+            RewriteEngine On
+            RewriteCond %{REQUEST_URI} !^/favicon.ico
+            RewriteCond %{REQUEST_URI} !^/static
+            RewriteCond %{REQUEST_URI} !^/uploads
+            RewriteCond %{REQUEST_URI} !^/photos
+            RewriteCond %{REQUEST_FILENAME} !-d
+            RewriteCond %{REQUEST_FILENAME} !-f
+            RewriteRule ^ /index.php [L]
+        </IfModule>
+    </Directory>
+    AccessFileName .htaccess
+    DocumentRoot /var/www/html/$r/public
+    ServerAdmin webmaster@localhost
+    ServerName $hostname
+    ServerAlias www.$hostname
+    ErrorLog /var/log/apache2/$r-error.log
+    CustomLog /var/log/apache2/$r-access.log combined
+    <FilesMatch \.php>
+        SetHandler "proxy:unix:/var/run/php/php$php_version-fpm.sock|fcgi://localhost/"
+    </FilesMatch>
+</VirtualHost>
+EOF
+)
+
+echo "host name"
+echo $hostname
+echo $conf_content
+# Add content to the configuration file
+echo "$conf_content" | sudo tee /etc/apache2/sites-available/$hostname.conf > /dev/null
+
+sudo a2ensite $hostname.conf
+sudo a2enmod rewrite
+
+# Restart Apache to apply changes
+sudo systemctl restart apache2
+
+echo "Configuration added to /etc/apache2/sites-available/$hostname.conf"
+echo "Apache restarted"
+ 
+
+		
+done
+
+echo ""
+echo "Installation of PHP versions ${versions[@]} completed!"
